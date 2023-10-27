@@ -1,67 +1,59 @@
-const fetch = require("node-fetch");
+const fetch = require('node-fetch');
 
-async function fetchTodos(allUsers) {
-  let pr1 = new Promise(async (resolve, reject) => {
-    let allUserTodos = [];
-    for (let i = 0; i < 5; i++) {
-      let id = allUsers.users[i].id;
-      let userName = allUsers.users[i].name;
-      let usertodosdata = await fetch(`http://localhost:3000/todos?user_id=${id}`);
-      const usertodos = await usertodosdata.json();
-      allUserTodos.push({ 'id': id, 'name': userName, 'todos': usertodos.todos })
+async function fetchUsers() {
+  const response = await fetch("http://localhost:3000/users");
+  const users = await response.json();
+  return users.users;
+}
+
+async function fetchTodos(users) {
+  const response = await fetch(`http://localhost:3000/todos?user_id=${users.id}`)
+  const todos = await response.json();
+  return {'id': users.id, 'name':users.name,'todos':todos.todos};
+}
+
+async function fetchTodosForUsers(users) {
+  const userChunks = chunkArray(users, 5);
+
+  let allTodos = [];
+
+  for (const chunk of userChunks) {
+    const todoPromises = chunk.map((user) => fetchTodos(user));
+    const chunkTodos = await Promise.all(todoPromises);
+
+    allTodos = allTodos.concat(chunkTodos);
+
+    if (chunk !== userChunks[userChunks.length - 1]) {
+      await sleep(1000);
     }
-    resolve(allUserTodos);
-  });
+  }
 
-  let pr2 = new Promise((resolve, reject) => {
-    setTimeout(async () => {
-      let allUserTodos = [];
-      for (let i = 5; i < 10; i++) {
-        let id = allUsers.users[i].id;
-        let userName = allUsers.users[i].name;
-        let usertodosdata = await fetch(`http://localhost:3000/todos?user_id=${id}`);
-        const usertodos = await usertodosdata.json();
-        allUserTodos.push({ 'id': id, 'name': userName, 'todos': usertodos.todos })
-      }
-      resolve(allUserTodos);
-    }, 5);
-  });
+  return allTodos;
+}
 
-  let pr3 = new Promise((resolve, reject) => {
-    setTimeout(async () => {
-      let allUserTodos = [];
-      for (let i = 10; i < 15; i++) {
-        let id = allUsers.users[i].id;
-        let userName = allUsers.users[i].name;
-        let usertodosdata = await fetch(`http://localhost:3000/todos?user_id=${id}`);
-        const usertodos = await usertodosdata.json();
-        allUserTodos.push({ 'id': id, 'name': userName, 'todos': usertodos.todos })
-      }
-      resolve(allUserTodos);
-    }, 2);
-  });
+function chunkArray(array, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
 
-  return Promise.all([pr1, pr2, pr3]);
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function main() {
-  const response = await fetch("http://localhost:3000/users");
-  const users = await response.json();
+  const users = await fetchUsers();
 
-  const [p1, p2, p3] = await fetchTodos(users);
-  let allTodos = [];
-  allTodos.push(p1, p2, p3);
-  allTodos = allTodos.flat();
-  const results = [];
-  allTodos.forEach((todo, index) => {
-    const numTodosCompleted = todo.todos.filter(todo => todo.isCompleted).length;
+  const allTodos = await fetchTodosForUsers(users);
+  console.log(allTodos);
+ const results = allTodos.map((todo) => ({
+    id: todo.id,
+    name: todo.name,
+    numTodosCompleted: todo.todos.filter((todo) => todo.isCompleted).length,
+  }));
 
-    results.push({
-      id: todo.id,
-      name: todo.name,
-      numTodosCompleted: numTodosCompleted,
-    });
-  });
   console.log(results);
 }
 
